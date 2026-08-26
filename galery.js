@@ -1,3 +1,5 @@
+"use strict";
+
 const cars = [
   {
     brand: "Hyundai",
@@ -101,21 +103,21 @@ const cars = [
   }
 ];
 
-const carContainer =
-    document.getElementById("car-container");
-
 const VAT_RATE = 0.19;
-
 let isVatIncluded = false;
 let currentLang = "tr";
-
-
-/* TRANSLATIONS */
+let selectedCar = null;
+const $ = id => document.getElementById(id);
+const modal = $("car-modal");
+const fallbackImage = "data:image/svg+xml;charset=UTF-8," + encodeURIComponent(
+    '<svg xmlns="http://www.w3.org/2000/svg" width="600" height="360" viewBox="0 0 600 360"><rect width="600" height="360" fill="#e2e8f0"/><path d="M120 215v-45l40-15 40-60h180l45 60 55 15v45Z" fill="#64748b"/><path d="m220 110-30 45h200l-30-45Z" fill="#cbd5e1"/><circle cx="190" cy="220" r="30" fill="#334155"/><circle cx="410" cy="220" r="30" fill="#334155"/></svg>'
+);
 
 const translations = {
     tr: {
-        pageTitle: "Tiger Gallery",
         searchPlaceholder: "Araba markası veya modeli ara (örn: BMW)...",
+        searchLabel: "Marka veya model ara",
+        sortLabel: "Araçları sırala",
         vatShow: "KDV Dahil Göster (%19)",
         vatHide: "Net Fiyat Göster (KDV'siz)",
         sortDefault: "Varsayılan Sıralama",
@@ -128,14 +130,19 @@ const translations = {
         speedLabel: "Maks. Hız",
         fuelLabel: "Yakıt",
         buyBtn: "Satın Al",
+        outOfStock: "Stokta Yok",
         noResults: "Araba bulunamadı.",
-        modalImageAlt: "Araba Resmi",
-        buyAlert: (brand, model, price) =>
-            `Tebrikler! ${brand} ${model} aracını $${price.toLocaleString()} tutarında satın aldınız.`
+        close: "Kapat",
+        details: "Detayları göster",
+        missingImage: "Fotoğraf yüklenemedi; temsili araç çizimi",
+        count: count => count + " araç bulundu.",
+        buyAlert: (name, price) => name + " için gösterilen fiyat: " + price +
+            ". Bu bir demo sayfasıdır; gerçek satın alma veya ödeme yapılmadı."
     },
     en: {
-        pageTitle: "Tiger Gallery",
         searchPlaceholder: "Search car brand or model (e.g. BMW)...",
+        searchLabel: "Search brand or model",
+        sortLabel: "Sort cars",
         vatShow: "Show with VAT (19%)",
         vatHide: "Show Net Price (Without VAT)",
         sortDefault: "Default Sorting",
@@ -148,435 +155,218 @@ const translations = {
         speedLabel: "Max Speed",
         fuelLabel: "Fuel",
         buyBtn: "Buy",
+        outOfStock: "Out of Stock",
         noResults: "No cars found.",
-        modalImageAlt: "Car Image",
-        buyAlert: (brand, model, price) =>
-            `Congratulations! You purchased the ${brand} ${model} for $${price.toLocaleString()}.`
+        close: "Close",
+        details: "Show details",
+        missingImage: "Photo unavailable; generic car illustration",
+        count: count => count + (count === 1 ? " car found." : " cars found."),
+        buyAlert: (name, price) => "Displayed price for " + name + ": " + price +
+            ". This is a demo page; no actual purchase or payment was made."
     }
 };
 
-
-/* BUY CAR */
-
-function buyCar(brand, model, price) {
-
-    const t = translations[currentLang];
-
-    alert(
-        t.buyAlert(brand, model, price)
-    );
+function formatNumber(value) {
+    return value.toLocaleString(currentLang === "tr" ? "tr-TR" : "en-US");
 }
 
+function getPrice(car) {
+    return Math.round(car.price * (isVatIncluded ? 1 + VAT_RATE : 1) * 100) / 100;
+}
 
-/* RENDER CAR LIST */
+function formatPrice(car) {
+    return new Intl.NumberFormat(currentLang === "tr" ? "tr-TR" : "en-US", {
+        style: "currency",
+        currency: "USD",
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
+    }).format(getPrice(car));
+}
+
+function priceText(car) {
+    const t = translations[currentLang];
+    return (isVatIncluded ? t.priceVatLabel : t.priceNetLabel) + ": " + formatPrice(car);
+}
+
+function normalizeSearch(value) {
+    return value.normalize("NFKD").replace(/[\u0300-\u036f]/g, "")
+        .toLowerCase().replace(/ı/g, "i").replace(/\s+/g, " ").trim();
+}
+
+function setCarImage(image, car) {
+    image.alt = car.brand + " " + car.model;
+    image.onerror = () => {
+        image.onerror = null;
+        image.src = fallbackImage;
+        image.alt = car.brand + " " + car.model + " — " + translations[currentLang].missingImage;
+    };
+    image.src = car.image;
+}
+
+function buyCar(car) {
+    if (!car.inStock) return;
+    alert(translations[currentLang].buyAlert(car.brand + " " + car.model, formatPrice(car)));
+}
+
+function detailTexts(car) {
+    const t = translations[currentLang];
+    return [
+        "📍 " + t.kmLabel + ": " + formatNumber(car.km) + " km",
+        "🚀 " + t.speedLabel + ": " + formatNumber(car.topSpeed) + " km/h",
+        "⛽ " + t.fuelLabel + ": " + formatNumber(car.fuel) + " L / 100 km"
+    ];
+}
 
 function displayCars(carList) {
-
     const t = translations[currentLang];
-
-    carContainer.innerHTML = "";
-
+    const fragment = document.createDocumentFragment();
+    $("result-count").textContent = t.count(carList.length);
     if (carList.length === 0) {
-
-        carContainer.innerHTML = `
-            <p class="no-results">
-                ${t.noResults}
-            </p>
-        `;
-
-        return;
+        const empty = document.createElement("p");
+        empty.className = "no-results";
+        empty.textContent = t.noResults;
+        fragment.appendChild(empty);
     }
-
-
-    const fragment =
-        document.createDocumentFragment();
-
-
     carList.forEach(car => {
-
-        const carCard =
-            document.createElement("div");
-
-        carCard.className = "car-card";
-
-
-        const finalPrice = isVatIncluded
-            ? car.price * (1 + VAT_RATE)
-            : car.price;
-
-
-        const priceLabel = isVatIncluded
-            ? t.priceVatLabel
-            : t.priceNetLabel;
-
-
-        carCard.innerHTML = `
-            <img
-                src="${car.image}"
-                alt="${car.brand} ${car.model}"
-                class="car-image"
-            >
-
-            <h2>
-                ${car.brand} ${car.model}
-            </h2>
-
-            <p class="price">
-                ${priceLabel}: $${Math.round(finalPrice).toLocaleString()}
-            </p>
-
-            <div class="car-details">
-                <p>📍 ${t.kmLabel}: ${car.km.toLocaleString()} km</p>
-                <p>🚀 ${t.speedLabel}: ${car.topSpeed} km/h</p>
-                <p>⛽ ${t.fuelLabel}: ${car.fuel} L / 100km</p>
-            </div>
-
-            <button class="buy-btn">
-                ${t.buyBtn}
-            </button>
-        `;
-
-
-        /* IMAGE CLICK HANDLER */
-
-        const carImage =
-            carCard.querySelector(".car-image");
-
-
-        carImage.addEventListener("click", () => {
-
-            openModal(
-                car.image,
-                car.brand,
-                car.model,
-                Math.round(finalPrice),
-                car.km,
-                car.topSpeed,
-                car.fuel,
-                priceLabel
-            );
-
+        const card = document.createElement("article");
+        card.className = "car-card";
+        // Only static markup goes into innerHTML; data is inserted as text.
+        card.innerHTML = '<button type="button" class="image-button"><img class="car-image" loading="lazy"></button>' +
+            '<h2></h2><p class="price"></p><div class="car-details"></div>' +
+            '<button type="button" class="buy-btn"></button>';
+        const name = car.brand + " " + car.model;
+        const imageButton = card.querySelector(".image-button");
+        imageButton.setAttribute("aria-label", name + " — " + t.details);
+        imageButton.setAttribute("aria-haspopup", "dialog");
+        imageButton.addEventListener("click", () => openModal(car));
+        setCarImage(card.querySelector("img"), car);
+        card.querySelector("h2").textContent = name;
+        card.querySelector(".price").textContent = priceText(car);
+        detailTexts(car).forEach(text => {
+            const paragraph = document.createElement("p");
+            paragraph.textContent = text;
+            card.querySelector(".car-details").appendChild(paragraph);
         });
-
-
-        /* BUY BUTTON HANDLER */
-
-        const buyButton =
-            carCard.querySelector(".buy-btn");
-
-
-        buyButton.addEventListener("click", () => {
-
-            buyCar(
-                car.brand,
-                car.model,
-                Math.round(finalPrice)
-            );
-
-        });
-
-
-        fragment.appendChild(carCard);
-
+        const buyButton = card.querySelector(".buy-btn");
+        buyButton.textContent = car.inStock ? t.buyBtn : t.outOfStock;
+        buyButton.disabled = !car.inStock;
+        buyButton.addEventListener("click", () => buyCar(car));
+        fragment.appendChild(card);
     });
-
-
-    carContainer.appendChild(fragment);
+    $("car-container").replaceChildren(fragment);
 }
 
-
-/* SEARCH + SORT */
-
 function filterCars() {
-
-    const searchInputValue =
-        document
-            .getElementById("search-input")
-            .value
-            .toLowerCase()
-            .trim();
-
-
-    const sortValue =
-        document.getElementById("sort-select").value;
-
-
-    let result = cars.filter(car => {
-
-        return (
-            car.brand
-                .toLowerCase()
-                .includes(searchInputValue)
-            ||
-            car.model
-                .toLowerCase()
-                .includes(searchInputValue)
-        );
-
-    });
-
-
-    if (sortValue === "price-asc") {
-
-        result.sort((a, b) =>
-            a.price - b.price
-        );
-
-    }
-
-    else if (sortValue === "price-desc") {
-
-        result.sort((a, b) =>
-            b.price - a.price
-        );
-
-    }
-
-    else if (sortValue === "km-asc") {
-
-        result.sort((a, b) =>
-            a.km - b.km
-        );
-
-    }
-
-
+    const query = normalizeSearch($("search-input").value);
+    const result = cars.filter(car =>
+        normalizeSearch(car.brand + " " + car.model).includes(query)
+    );
+    const sorters = {
+        "price-asc": (a, b) => a.price - b.price,
+        "price-desc": (a, b) => b.price - a.price,
+        "km-asc": (a, b) => a.km - b.km
+    };
+    const sorter = sorters[$("sort-select").value];
+    if (sorter) result.sort(sorter);
     displayCars(result);
 }
 
-
-/* VAT */
-
-function toggleVat() {
-
-    isVatIncluded = !isVatIncluded;
-
+function refreshModal() {
+    if (!selectedCar) return;
     const t = translations[currentLang];
-
-    const vatBtn =
-        document.getElementById("vat-toggle-btn");
-
-
-    if (isVatIncluded) {
-
-        vatBtn.textContent = t.vatHide;
-
-        vatBtn.classList.add("active");
-
+    $("modal-title").textContent = selectedCar.brand + " " + selectedCar.model;
+    $("modal-price").textContent = priceText(selectedCar);
+    const details = detailTexts(selectedCar);
+    ["modal-km", "modal-speed", "modal-fuel"].forEach((id, i) => {
+        $(id).textContent = details[i];
+    });
+    $("modal-buy-btn").textContent = selectedCar.inStock ? t.buyBtn : t.outOfStock;
+    $("modal-buy-btn").disabled = !selectedCar.inStock;
+    $("close-modal").setAttribute("aria-label", t.close);
+    if ($("modal-image").getAttribute("src") === fallbackImage) {
+        $("modal-image").alt = selectedCar.brand + " " + selectedCar.model + " — " + t.missingImage;
     }
-
-    else {
-
-        vatBtn.textContent = t.vatShow;
-
-        vatBtn.classList.remove("active");
-
-    }
-
-
-    filterCars();
 }
 
-
-/* OPEN MODAL */
-
-function openModal(
-    image,
-    brand,
-    model,
-    price,
-    km,
-    topSpeed,
-    fuel,
-    priceLabel
-) {
-
-    const t = translations[currentLang];
-
-    document.getElementById("modal-image").src =
-        image;
-
-    document.getElementById("modal-image").alt =
-        t.modalImageAlt;
-
-
-    document.getElementById("modal-title").textContent =
-        `${brand} ${model}`;
-
-
-    document.getElementById("modal-price").textContent =
-        `${priceLabel}: $${price.toLocaleString()}`;
-
-
-    document.getElementById("modal-km").textContent =
-        `📍 ${t.kmLabel}: ${km.toLocaleString()} km`;
-
-
-    document.getElementById("modal-speed").textContent =
-        `🚀 ${t.speedLabel}: ${topSpeed} km/h`;
-
-
-    document.getElementById("modal-fuel").textContent =
-        `⛽ ${t.fuelLabel}: ${fuel} L / 100km`;
-
-
-    const modalBuyButton =
-        document.getElementById("modal-buy-btn");
-
-    modalBuyButton.textContent = t.buyBtn;
-
-    modalBuyButton.onclick = () => {
-
-        buyCar(
-            brand,
-            model,
-            price
-        );
-
-        closeModal();
-    };
-
-
-    document.getElementById("car-modal").style.display =
-        "flex";
+function openModal(car) {
+    selectedCar = car;
+    setCarImage($("modal-image"), car);
+    refreshModal();
+    if (!modal.open) modal.showModal();
+    document.body.classList.add("modal-open");
 }
-
-
-/* CLOSE MODAL */
 
 function closeModal() {
-
-    document.getElementById("car-modal").style.display =
-        "none";
+    if (modal.open) modal.close();
+    document.body.classList.remove("modal-open");
+    selectedCar = null;
 }
 
+function refreshVatButton() {
+    const button = $("vat-toggle-btn");
+    const t = translations[currentLang];
+    button.textContent = isVatIncluded ? t.vatHide : t.vatShow;
+    button.classList.toggle("active", isVatIncluded);
+    button.setAttribute("aria-pressed", String(isVatIncluded));
+}
 
-/* LANGUAGE SWITCH */
+function toggleVat() {
+    isVatIncluded = !isVatIncluded;
+    refreshVatButton();
+    filterCars();
+    refreshModal();
+}
 
 function setLanguage(lang) {
-
+    if (!Object.hasOwn(translations, lang)) return;
     currentLang = lang;
-
     const t = translations[lang];
-
     document.documentElement.lang = lang;
-
-    document.getElementById("page-title").textContent =
-        t.pageTitle;
-
-    document.getElementById("search-input").placeholder =
-        t.searchPlaceholder;
-
-    document.getElementById("opt-default").textContent =
-        t.sortDefault;
-
-    document.getElementById("opt-price-asc").textContent =
-        t.sortPriceAsc;
-
-    document.getElementById("opt-price-desc").textContent =
-        t.sortPriceDesc;
-
-    document.getElementById("opt-km-asc").textContent =
-        t.sortKmAsc;
-
-    const vatBtn =
-        document.getElementById("vat-toggle-btn");
-
-    vatBtn.textContent = isVatIncluded ? t.vatHide : t.vatShow;
-
-    document.getElementById("lang-tr-btn").classList.toggle(
-        "active", lang === "tr"
-    );
-
-    document.getElementById("lang-en-btn").classList.toggle(
-        "active", lang === "en"
-    );
-
+    $("search-input").placeholder = t.searchPlaceholder;
+    const labels = {
+        "search-label": t.searchLabel, "sort-label": t.sortLabel,
+        "opt-default": t.sortDefault, "opt-price-asc": t.sortPriceAsc,
+        "opt-price-desc": t.sortPriceDesc, "opt-km-asc": t.sortKmAsc
+    };
+    Object.entries(labels).forEach(([id, text]) => { $(id).textContent = text; });
+    ["tr", "en"].forEach(code => {
+        const button = $("lang-" + code + "-btn");
+        button.classList.toggle("active", lang === code);
+        button.setAttribute("aria-pressed", String(lang === code));
+    });
+    refreshVatButton();
     filterCars();
+    refreshModal();
 }
 
-
-/* CLOSE BUTTON (X) */
-
-document
-    .getElementById("close-modal")
-    .addEventListener(
-        "click",
-        closeModal
-    );
-
-
-/* BACKDROP CLICK */
-
-document
-    .getElementById("car-modal")
-    .addEventListener("click", event => {
-
-        if (event.target.id === "car-modal") {
-            closeModal();
-        }
-
-    });
-
-
-/* ESC KEY */
-
-document.addEventListener("keydown", event => {
-
-    if (event.key === "Escape") {
-        closeModal();
-    }
-
+$("search-input").addEventListener("input", filterCars);
+$("sort-select").addEventListener("change", filterCars);
+$("vat-toggle-btn").addEventListener("click", toggleVat);
+$("lang-tr-btn").addEventListener("click", () => setLanguage("tr"));
+$("lang-en-btn").addEventListener("click", () => setLanguage("en"));
+$("close-modal").addEventListener("click", closeModal);
+$("modal-buy-btn").addEventListener("click", () => {
+    if (selectedCar) buyCar(selectedCar);
+    closeModal();
 });
-
-
-/* SEARCH */
-
-document
-    .getElementById("search-input")
-    .addEventListener(
-        "input",
-        filterCars
-    );
-
-
-/* SORT */
-
-document
-    .getElementById("sort-select")
-    .addEventListener(
-        "change",
-        filterCars
-    );
-
-
-/* VAT BUTTON */
-
-document
-    .getElementById("vat-toggle-btn")
-    .addEventListener(
-        "click",
-        toggleVat
-    );
-
-
-/* LANGUAGE BUTTONS */
-
-document
-    .getElementById("lang-tr-btn")
-    .addEventListener(
-        "click",
-        () => setLanguage("tr")
-    );
-
-document
-    .getElementById("lang-en-btn")
-    .addEventListener(
-        "click",
-        () => setLanguage("en")
-    );
-
-
-/* INITIAL RENDER */
+// Native dialog provides focus containment, focus restoration and Escape support.
+modal.addEventListener("cancel", event => {
+    event.preventDefault();
+    closeModal();
+});
+modal.addEventListener("close", () => {
+    if (!modal.open) {
+        document.body.classList.remove("modal-open");
+        selectedCar = null;
+    }
+});
+let pointerStartedOnBackdrop = false;
+modal.addEventListener("pointerdown", event => {
+    pointerStartedOnBackdrop = event.target === modal;
+});
+modal.addEventListener("click", event => {
+    if (pointerStartedOnBackdrop && event.target === modal) closeModal();
+    pointerStartedOnBackdrop = false;
+});
 
 setLanguage(currentLang);
