@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="tr">
+
+<head>
+    <meta charset="UTF-8">
+
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0"
+    >
+
+    <title>Tiger Car Gallery</title>
+
+    <link rel="stylesheet" href="car.css">
+</head>
+
+<body>
+
+    <main>
+
+        <h1 id="page-title">Tiger Gallery</h1>
+
+        <div class="search-box">
+            <input
+                type="text"
+                id="search-input"
+                placeholder="Araba markası veya modeli ara (örn: BMW)..."
+            >
+        </div>
+
+
+        <div class="filter-container">
+
+            <div class="lang-toggle">
+                <button id="lang-tr-btn" class="lang-btn active">TR</button>
+                <button id="lang-en-btn" class="lang-btn">EN</button>
+            </div>
+
+            <button
+                id="vat-toggle-btn"
+                class="vat-btn"
+            >
+                Show with VAT (%19)
+            </button>
+
+            <select id="sort-select">
+
+                <option value="default" id="opt-default">
+                    Varsayılan Sıralama
+                </option>
+
+                <option value="price-asc" id="opt-price-asc">
+                    Fiyat: Düşükten Yükseğe
+                </option>
+
+                <option value="price-desc" id="opt-price-desc">
+                    Fiyat: Yüksekten Düşüğe
+                </option>
+
+                <option value="km-asc" id="opt-km-asc">
+                    KM: Düşükten Yükseğe
+                </option>
+
+            </select>
+
+        </div>
+
+
+        <div id="car-container"></div>
+
+    </main>
+
+
+    <!-- MODAL -->
+
+    <div id="car-modal" class="modal">
+
+        <div class="modal-content">
+
+            <button
+                id="close-modal"
+                class="close-btn"
+                aria-label="Close"
+            >
+                &times;
+            </button>
+
+            <img
+                id="modal-image"
+                src=""
+                alt="Araba Resmi"
+            >
+
+            <h2 id="modal-title">
+                Marka Model
+            </h2>
+
+            <p
+                id="modal-price"
+                class="price"
+            >
+                Fiyat
+            </p>
+
+            <div class="car-details">
+
+                <p id="modal-km"></p>
+
+                <p id="modal-speed"></p>
+
+                <p id="modal-fuel"></p>
+
+            </div>
+
+            <button
+                id="modal-buy-btn"
+                class="buy-btn"
+            >
+                Buy
+            </button>
+
+        </div>
+
+    </div>
+
+
+    <script src="galery.js"></script>
+
+</body>
+
+</html>
